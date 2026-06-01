@@ -188,8 +188,252 @@
     </div>
     <div class="toast" id="toast"><span class="toast-icon" id="toast-icon"></span><span id="toast-message"></span></div>
     <script>
-        // (All JavaScript from original file omitted for brevity; copy the script section from the original index.html)
-        // ...
+        // Dashboard logic
+        const fileInput = document.getElementById('file-input');
+        const loader = document.getElementById('file-loader');
+        const welcomeView = document.getElementById('welcome-view');
+        const dashboardView = document.getElementById('dashboard-view');
+        const loadedFilename = document.getElementById('loaded-filename');
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+        const toastIcon = document.getElementById('toast-icon');
+
+        let rawData = [];
+        let filteredData = [];
+        let currentPage = 1;
+        const rowsPerPage = 10;
+
+        // Chart instances
+        let salesBudgetChart, historyChart, brandChart, genderChart;
+
+        fileInput.addEventListener('change', handleFileSelect);
+        document.getElementById('filter-mes').addEventListener('change', applyFilters);
+        document.getElementById('filter-genero').addEventListener('change', applyFilters);
+        document.getElementById('filter-marca').addEventListener('change', applyFilters);
+        document.getElementById('filter-producto').addEventListener('change', applyFilters);
+        document.getElementById('table-search').addEventListener('input', applyFilters);
+
+        function showToast(message, type = 'success') {
+            toastMessage.textContent = message;
+            toastIcon.className = 'toast-icon ' + (type === 'error' ? 'error' : 'success');
+            toast.className = 'toast show ' + (type === 'error' ? 'error' : 'success');
+            setTimeout(() => { toast.classList.remove('show'); }, 3000);
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!file.name.toLowerCase().endsWith('.xlsx')) {
+                showToast('Formato no soportado. Selecciona un .xlsx', 'error');
+                return;
+            }
+            loader.style.display = 'block';
+            const reader = new FileReader();
+            reader.onload = e => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.SheetNames[0];
+                const json = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], {defval: ''});
+                rawData = json;
+                loadedFilename.textContent = `Cargado: ${file.name}`;
+                processData();
+                loader.style.display = 'none';
+                welcomeView.style.display = 'none';
+                dashboardView.style.display = 'block';
+                showToast('Archivo cargado exitosamente');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processData() {
+            // Populate filter options
+            populateSelect('filter-mes', [...new Set(rawData.map(d => d.Mes))]);
+            populateSelect('filter-genero', [...new Set(rawData.map(d => d.Género))]);
+            populateSelect('filter-marca', [...new Set(rawData.map(d => d.Marca))]);
+            populateSelect('filter-producto', [...new Set(rawData.map(d => d.Producto))]);
+
+            applyFilters(); // also renders KPI, charts, table
+        }
+
+        function populateSelect(id, values) {
+            const select = document.getElementById(id);
+            // Keep first option (ALL)
+            select.length = 1;
+            values.filter(v => v).forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.textContent = v;
+                select.appendChild(opt);
+            });
+        }
+
+        function applyFilters() {
+            const mes = document.getElementById('filter-mes').value;
+            const genero = document.getElementById('filter-genero').value;
+            const marca = document.getElementById('filter-marca').value;
+            const producto = document.getElementById('filter-producto').value;
+            const search = document.getElementById('table-search').value.toLowerCase();
+
+            filteredData = rawData.filter(row => {
+                return (mes === 'ALL' || row.Mes === mes) &&
+                       (genero === 'ALL' || row.Género === genero) &&
+                       (marca === 'ALL' || row.Marca === marca) &&
+                       (producto === 'ALL' || row.Producto === producto) &&
+                       (search === '' || Object.values(row).some(v => String(v).toLowerCase().includes(search)));
+            });
+
+            currentPage = 1;
+            updateKPIs();
+            renderCharts();
+            renderTable();
+        }
+
+        function updateKPIs() {
+            const totalSales = filteredData.reduce((a, r) => a + Number(r.Venta || 0), 0);
+            const totalUnits = filteredData.reduce((a, r) => a + Number(r.Unidades || 0), 0);
+            const totalBudget = filteredData.reduce((a, r) => a + Number(r.Presupuesto || 0), 0);
+            const ebitda = totalSales - totalBudget;
+            const budgetPct = totalBudget ? ((totalSales / totalBudget) * 100).toFixed(1) + '%' : '0%';
+
+            document.querySelector('#kpi-sales .kpi-value').textContent = `$${totalSales.toLocaleString()}`;
+            document.querySelector('#kpi-units .kpi-value').textContent = totalUnits.toLocaleString();
+            document.querySelector('#kpi-budget .kpi-value').textContent = budgetPct;
+            document.querySelector('#kpi-ebitda .kpi-value').textContent = `$${ebitda.toLocaleString()}`;
+        }
+
+        function renderCharts() {
+            // Sales vs Budget per product (top 8)
+            const aggProd = {};
+            filteredData.forEach(r => {
+                const prod = r.Producto || 'Sin producto';
+                aggProd[prod] = aggProd[prod] || {sales:0, budget:0};
+                aggProd[prod].sales += Number(r.Venta || 0);
+                aggProd[prod].budget += Number(r.Presupuesto || 0);
+            });
+            const prodLabels = Object.keys(aggProd);
+            const salesData = prodLabels.map(p => aggProd[p].sales);
+            const budgetData = prodLabels.map(p => aggProd[p].budget);
+            const topIdx = salesData.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]).slice(0,8).map(pair=>pair[1]);
+            const topLabels = topIdx.map(i=>prodLabels[i]);
+            const topSales = topIdx.map(i=>salesData[i]);
+            const topBudget = topIdx.map(i=>budgetData[i]);
+            if (salesBudgetChart) salesBudgetChart.destroy();
+            salesBudgetChart = new Chart(document.getElementById('chart-sales-budget'), {
+                type: 'bar',
+                data: {
+                    labels: topLabels,
+                    datasets: [
+                        {label: 'Ventas', data: topSales, backgroundColor: 'rgba(79,70,229,0.7)'},
+                        {label: 'Presupuesto', data: topBudget, backgroundColor: 'rgba(6,182,212,0.7)'}
+                    ]
+                },
+                options: {responsive:true, plugins:{legend:{position:'top'}}}
+            });
+
+            // Historical sales by month
+            const monthAgg = {};
+            filteredData.forEach(r => {
+                const mes = r.Mes || 'Sin mes';
+                monthAgg[mes] = (monthAgg[mes] || 0) + Number(r.Venta || 0);
+            });
+            const monthLabels = Object.keys(monthAgg);
+            const monthValues = monthLabels.map(m=>monthAgg[m]);
+            if (historyChart) historyChart.destroy();
+            historyChart = new Chart(document.getElementById('chart-history'), {
+                type: 'line',
+                data: {labels: monthLabels, datasets:[{label:'Ventas', data: monthValues, borderColor:'var(--secondary)', tension:0.3}]},
+                options:{responsive:true}
+            });
+
+            // Brand sales (top 5)
+            const brandAgg = {};
+            filteredData.forEach(r => {
+                const b = r.Marca || 'Sin marca';
+                brandAgg[b] = (brandAgg[b] || 0) + Number(r.Venta || 0);
+            });
+            const brandLabels = Object.keys(brandAgg);
+            const brandValues = brandLabels.map(b=>brandAgg[b]);
+            const topBrandIdx = brandValues.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]).slice(0,5).map(p=>p[1]);
+            const topBrandLabels = topBrandIdx.map(i=>brandLabels[i]);
+            const topBrandVals = topBrandIdx.map(i=>brandValues[i]);
+            if (brandChart) brandChart.destroy();
+            brandChart = new Chart(document.getElementById('chart-brand'), {
+                type: 'pie',
+                data: {labels: topBrandLabels, datasets:[{data: topBrandVals, backgroundColor:['#4f46e5','#06b6d4','#10b981','#f59e0b','#ef4444']}]},
+                options:{responsive:true}
+            });
+
+            // Gender composition
+            const genderAgg = {};
+            filteredData.forEach(r => {
+                const g = r.Género || 'Sin género';
+                genderAgg[g] = (genderAgg[g] || 0) + Number(r.Venta || 0);
+            });
+            const genderLabels = Object.keys(genderAgg);
+            const genderValues = genderLabels.map(g=>genderAgg[g]);
+            if (genderChart) genderChart.destroy();
+            genderChart = new Chart(document.getElementById('chart-gender'), {
+                type: 'doughnut',
+                data: {labels: genderLabels, datasets:[{data: genderValues, backgroundColor:['#6366f1','#f59e0b','#ef4444']}]},
+                options:{responsive:true}
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            const start = (currentPage - 1) * rowsPerPage;
+            const pageData = filteredData.slice(start, start + rowsPerPage);
+            pageData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row.Producto || ''}</td>
+                    <td>${row.Marca || ''}</td>
+                    <td>${row.Género || ''}</td>
+                    <td class="neutral">${row.Unidades || ''}</td>
+                    <td class="positive">$${Number(row.Venta||0).toLocaleString()}</td>
+                    <td class="neutral">$${Number(row.Presupuesto||0).toLocaleString()}</td>
+                    <td class="${row.Venta && row.Presupuesto && Number(row.Presupuesto)>0 ? (Number(row.Venta)/Number(row.Presupuesto)>=1 ? 'positive' : 'negative') : 'neutral'}">
+                        ${row.Presupuesto && Number(row.Presupuesto)>0 ? ((Number(row.Venta)/Number(row.Presupuesto))*100).toFixed(1)+'%' : '-'}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('table-info').textContent = `Mostrando ${start + 1}-${Math.min(start + rowsPerPage, filteredData.length)} de ${filteredData.length} productos`;
+            document.getElementById('btn-prev').disabled = currentPage === 1;
+            document.getElementById('btn-next').disabled = start + rowsPerPage >= filteredData.length;
+        }
+
+        function changePage(delta) {
+            const maxPage = Math.ceil(filteredData.length / rowsPerPage);
+            const newPage = currentPage + delta;
+            if (newPage < 1 || newPage > maxPage) return;
+            currentPage = newPage;
+            renderTable();
+        }
+
+        function resetFilters() {
+            document.getElementById('filter-mes').value = 'ALL';
+            document.getElementById('filter-genero').value = 'ALL';
+            document.getElementById('filter-marca').value = 'ALL';
+            document.getElementById('filter-producto').value = 'ALL';
+            document.getElementById('table-search').value = '';
+            applyFilters();
+        }
+
+        function resetFile() {
+            rawData = [];
+            filteredData = [];
+            document.getElementById('file-input').value = '';
+            welcomeView.style.display = 'flex';
+            dashboardView.style.display = 'none';
+            loadedFilename.textContent = 'Cargado: Ninguno';
+            showToast('Vista reiniciada');
+        }
+
+        function openNewFile() {
+            document.getElementById('file-input').click();
+        }
     </script>
 </body>
 </html>
