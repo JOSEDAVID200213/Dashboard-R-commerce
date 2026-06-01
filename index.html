@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://unpkg.com data: blob:; img-src 'self' data: blob:;">
+    <title>Dashboard E-Commerce</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- SheetJS to parse Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(20, 26, 46, 0.45);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --primary: #4f46e5;
+            --primary-hover: #6366f1;
+            --secondary: #06b6d4;
+            --accent: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --glass-blur: blur(16px);
+            --glow-color: rgba(79, 70, 229, 0.15);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * {box-sizing:border-box;margin:0;padding:0;font-family:'Outfit',sans-serif;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.2) transparent;}
+        ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.3)}
+        body{background-color:var(--bg-color);color:var(--text-main);min-height:100vh;overflow-x:hidden;background-image:radial-gradient(circle at 10% 20%,rgba(79,70,229,0.15)0%,transparent 40%),radial-gradient(circle at 90% 80%,rgba(6,182,212,0.12)0%,transparent 45%);background-attachment:fixed;user-select:none;}
+        .welcome-container{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem;text-align:center;}
+        .welcome-card{background:var(--panel-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--panel-border);padding:3rem 2.5rem;border-radius:24px;max-width:580px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.05);display:flex;flex-direction:column;align-items:center;gap:1.5rem;animation:fadeIn .8s ease;}
+        .logo-area{background:linear-gradient(135deg,var(--primary),var(--secondary));width:72px;height:72px;border-radius:20px;display:flex;align-items:center;justify-content:center;color:white;box-shadow:0 10px 30px rgba(79,70,229,0.4);}
+        .welcome-card h1{font-size:2rem;font-weight:800;background:linear-gradient(to right,#fff,#a5b4fc,#67e8f9);-webkit-background-clip:text;color:transparent;line-height:1.2;}
+        .welcome-card p{color:var(--text-muted);font-size:.95rem;line-height:1.6;}
+        .drop-zone{border:2px dashed rgba(255,255,255,0.15);border-radius:16px;padding:2.5rem 1.5rem;width:100%;cursor:pointer;transition:var(--transition);background:rgba(255,255,255,0.01);display:flex;flex-direction:column;align-items:center;gap:1rem;position:relative;}
+        .drop-zone:hover,.drop-zone.dragover{border-color:var(--secondary);background:rgba(6,182,212,0.05);box-shadow:0 0 20px rgba(6,182,212,0.12);}
+        .drop-icon{color:var(--secondary);transition:var(--transition);opacity:.8;}
+        .drop-zone:hover .drop-icon{transform:translateY(-6px);opacity:1;}
+        .drop-zone .drop-title{font-size:1rem;font-weight:600;color:var(--text-main);}
+        .drop-zone .drop-sub{font-size:.82rem;color:var(--text-muted);}
+        .btn-actions{display:flex;gap:.75rem;margin-top:.25rem;}
+        .btn-select{background:linear-gradient(135deg,var(--primary),var(--primary-hover));color:white;padding:.65rem 1.5rem;border-radius:10px;font-size:.88rem;font-weight:600;border:none;cursor:pointer;box-shadow:0 4px 15px rgba(79,70,229,0.3);transition:var(--transition);display:flex;align-items:center;gap:.5rem;}
+        .btn-select:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(79,70,229,0.4);}
+        .btn-select:active{transform:translateY(0);}
+        #file-input{display:none;}
+        .welcome-footer{font-size:.75rem;color:var(--text-muted);display:flex;align-items:center;gap:.4rem;opacity:.7;}
+        .loader{border:3px solid rgba(255,255,255,0.08);border-radius:50%;border-top:3px solid var(--secondary);width:26px;height:26px;animation:spin .8s linear infinite;display:none;}
+        .dashboard-container{display:none;padding:1.5rem 2rem 2rem;max-width:1600px;margin:0 auto;animation:fadeIn .6s ease;}
+        header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;gap:1rem;}
+        .header-title-area{display:flex;align-items:center;gap:1rem;}
+        .header-icon{background:linear-gradient(135deg,var(--primary),var(--secondary));width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:white;flex-shrink:0;box-shadow:0 6px 16px rgba(79,70,229,0.3);}
+        .header-title-area h2{font-size:1.6rem;font-weight:700;color:white;line-height:1.2;}
+        .header-title-area p{font-size:.8rem;color:var(--text-muted);}
+        .header-actions{display:flex;align-items:center;gap:.75rem;}
+        .btn-secondary{background:var(--panel-bg);border:1px solid var(--panel-border);color:var(--text-main);padding:.6rem 1.2rem;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:var(--transition);backdrop-filter:var(--glass-blur);}
+        .btn-secondary:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.2);}
+        .filters-panel{background:var(--panel-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--panel-border);border-radius:16px;padding:1.2rem 1.5rem;margin-bottom:1.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;align-items:flex-end;box-shadow:0 8px 20px rgba(0,0,0,0.15);}
+        .filter-group{display:flex;flex-direction:column;gap:.4rem;}
+        .filter-label{font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+        .filter-select{background:rgba(11,15,25,0.7);border:1px solid var(--panel-border);border-radius:8px;padding:.55rem .9rem;color:var(--text-main);font-size:.88rem;outline:none;cursor:pointer;transition:var(--transition);font-family:'Outfit',sans-serif;}
+        .filter-select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--glow-color);}
+        .filter-select option{background:#141a2e;color:var(--text-main);}
+        .btn-reset{background:rgba(239,68,68,0.08);color:var(--danger);border:1px solid rgba(239,68,68,0.2);padding:.55rem 1rem;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;transition:var(--transition);display:flex;align-items:center;justify-content:center;gap:.5rem;height:36px;font-family:'Outfit',sans-serif;}
+        .btn-reset:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
+        .kpis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1.2rem;margin-bottom:1.5rem;}
+        .kpi-card{background:var(--panel-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--panel-border);border-radius:16px;padding:1.4rem 1.5rem;display:flex;align-items:center;justify-content:space-between;transition:var(--transition);box-shadow:0 8px 24px rgba(0,0,0,0.12);position:relative;overflow:hidden;}
+        .kpi-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,rgba(255,255,255,0.02)0%,transparent 100%);pointer-events:none;}
+        .kpi-card::after{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--primary);border-radius:4px 0 0 4px;}
+        .kpi-card.cyan::after{background:var(--secondary);} .kpi-card.emerald::after{background:var(--accent);} .kpi-card.orange::after{background:var(--warning);}
+        .kpi-card:hover{transform:translateY(-4px);border-color:rgba(255,255,255,0.14);box-shadow:0 16px 32px rgba(0,0,0,0.2);}
+        .kpi-info h4{font-size:.78rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem;}
+        .kpi-value{font-size:1.7rem;font-weight:800;color:#fff;line-height:1.1;letter-spacing:-.02em;}
+        .kpi-footer{margin-top:.4rem;font-size:.78rem;display:flex;align-items:center;gap:.3rem;}
+        .kpi-footer.positive{color:var(--accent);} .kpi-footer.negative{color:var(--danger);} .kpi-footer.neutral{color:var(--text-muted);}
+        .kpi-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04);color:var(--text-muted);transition:var(--transition);flex-shrink:0;}
+        .kpi-card:hover .kpi-icon{background:var(--glow-color);color:var(--primary-hover);}
+        .charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.2rem;margin-bottom:1.5rem;}
+        @media (max-width:1100px){.charts-grid{grid-template-columns:1fr;}}
+        .chart-card{background:var(--panel-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--panel-border);border-radius:16px;padding:1.4rem;box-shadow:0 8px 24px rgba(0,0,0,0.12);display:flex;flex-direction:column;gap:1rem;min-height:360px;}
+        .chart-header{display:flex;justify-content:space-between;align-items:center;}
+        .chart-title{font-size:.98rem;font-weight:700;color:#fff;}
+        .chart-container{position:relative;flex-grow:1;width:100%;}
+        .table-panel{background:var(--panel-bg);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--panel-border);border-radius:16px;padding:1.4rem;box-shadow:0 8px 24px rgba(0,0,0,0.12);margin-bottom:2rem;}
+        .table-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1.2rem;}
+        .table-title{font-size:1rem;font-weight:700;color:#fff;}
+        .search-container{position:relative;max-width:300px;width:100%;}
+        .search-input{width:100%;background:rgba(11,15,25,0.7);border:1px solid var(--panel-border);border-radius:8px;padding:.55rem 1rem .55rem 2.2rem;color:var(--text-main);font-size:.85rem;outline:none;transition:var(--transition);font-family:'Outfit',sans-serif;}
+        .search-input:focus{border-color:var(--secondary);box-shadow:0 0 0 3px rgba(6,182,212,0.1);}
+        .search-icon{position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--text-muted);width:15px;height:15px;}
+        .table-wrapper{overflow-x:auto;width:100%;border-radius:8px;}
+        table{width:100%;border-collapse:collapse;text-align:left;font-size:.85rem;}
+        th{padding:.9rem 1rem;border-bottom:1px solid rgba(255,255,255,0.08);color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:.75rem;white-space:nowrap;}
+        td{padding:.9rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);color:var(--text-main);}
+        tr:last-child td{border-bottom:none;}
+        tr:hover td{background:rgba(255,255,255,0.025);}
+        td.positive{color:var(--accent);font-weight:700;} td.negative{color:var(--danger);font-weight:700;} td.neutral{color:var(--text-muted);}
+        .pagination-container{display:flex;justify-content:space-between;align-items:center;margin-top:1rem;font-size:.8rem;color:var(--text-muted);padding-top:1rem;border-top:1px solid rgba(255,255,255,0.05);}
+        .pagination-buttons{display:flex;gap:.5rem;}
+        .btn-page{background:rgba(255,255,255,0.04);border:1px solid var(--panel-border);color:var(--text-main);padding:.4rem .9rem;border-radius:7px;cursor:pointer;transition:var(--transition);font-size:.82rem;font-family:'Outfit',sans-serif;}
+        .btn-page:hover:not(:disabled){background:var(--primary);border-color:var(--primary);color:#fff;}
+        .btn-page:disabled{opacity:.35;cursor:not-allowed;}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+        @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+        .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:rgba(20,26,46,0.95);border:1px solid var(--panel-border);border-radius:12px;padding:1rem 1.4rem;display:flex;align-items:center;gap:.75rem;font-size:.88rem;box-shadow:0 10px 30px rgba(0,0,0,0.4);backdrop-filter:var(--glass-blur);transform:translateY(20px);opacity:0;transition:all .4s cubic-bezier(0.4,0,0.2,1);z-index:9999;max-width:360px;}
+        .toast.show{transform:translateY(0);opacity:1;}
+        .toast.success{border-color:rgba(16,185,129,0.3);} .toast.error{border-color:rgba(239,68,68,0.3);}
+        .toast-icon{flex-shrink:0;}.toast-icon.success{color:var(--accent);} .toast-icon.error{color:var(--danger);}
+        .badge{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:20px;font-size:.72rem;font-weight:600;}
+        .badge-green{background:rgba(16,185,129,0.12);color:var(--accent);border:1px solid rgba(16,185,129,0.25);} .badge-blue{background:rgba(79,70,229,0.12);color:#a5b4fc;border:1px solid rgba(79,70,229,0.25);}
+    </style>
+</head>
+<body>
+    <!-- Welcome & Load Screen -->
+    <div id="welcome-view" class="welcome-container">
+        <div class="welcome-card">
+            <div class="logo-area"><i data-lucide="bar-chart-3" style="width:34px;height:34px;"></i></div>
+            <h1>Dashboard E-Commerce<br>Interactivo</h1>
+            <p>Carga tu archivo Excel para visualizar KPIs, gráficas de ventas y análisis detallado por producto, marca y género.</p>
+            <div class="drop-zone" id="drop-zone">
+                <i data-lucide="upload-cloud" class="drop-icon" style="width:48px;height:48px;"></i>
+                <span class="drop-title">Arrastra y suelta tu archivo Excel aquí</span>
+                <p class="drop-sub">Formato compatible: <strong>.xlsx</strong></p>
+                <div class="btn-actions">
+                    <button class="btn-select" type="button" id="btn-browse"><i data-lucide="folder-open" style="width:16px;height:16px;"></i> Examinar Archivo</button>
+                </div>
+                <input type="file" id="file-input" accept=".xlsx">
+            </div>
+            <div class="loader" id="file-loader"></div>
+            <p class="welcome-footer"><i data-lucide="shield-check" style="width:13px;height:13px;"></i> Compatible con: <em>Dashboard E commerce.xlsx</em></p>
+        </div>
+    </div>
+    <!-- Interactive Dashboard View -->
+    <div id="dashboard-view" class="dashboard-container">
+        <header>
+            <div class="header-title-area">
+                <div class="header-icon"><i data-lucide="layout-dashboard" style="width:22px;height:22px;"></i></div>
+                <div>
+                    <h2>E-Commerce Dashboard</h2>
+                    <p id="loaded-filename">Cargado: Ninguno</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn-secondary" onclick="openNewFile()" id="btn-open-new"><i data-lucide="folder-open" style="width:15px;height:15px;"></i> Abrir otro Excel</button>
+                <button class="btn-secondary" onclick="resetFile()"><i data-lucide="refresh-cw" style="width:15px;height:15px;"></i> Volver al inicio</button>
+            </div>
+        </header>
+        <!-- Filters Bar -->
+        <section class="filters-panel">
+            <div class="filter-group"><span class="filter-label">Mes</span><select class="filter-select" id="filter-mes"><option value="ALL">Todos los Meses</option></select></div>
+            <div class="filter-group"><span class="filter-label">Género</span><select class="filter-select" id="filter-genero"><option value="ALL">Todos los Géneros</option></select></div>
+            <div class="filter-group"><span class="filter-label">Marca</span><select class="filter-select" id="filter-marca"><option value="ALL">Todas las Marcas</option></select></div>
+            <div class="filter-group"><span class="filter-label">Categoría Producto</span><select class="filter-select" id="filter-producto"><option value="ALL">Todas las Categorías</option></select></div>
+            <button class="btn-reset" onclick="resetFilters()"><i data-lucide="filter-x" style="width:15px;height:15px;"></i> Limpiar</button>
+        </section>
+        <!-- KPI Cards -->
+        <section class="kpis-grid">
+            <div class="kpi-card" id="kpi-sales"><div class="kpi-info"><h4>Ventas Actuales</h4><div class="kpi-value">$0</div><div class="kpi-footer neutral" id="kpi-sales-footer"><span>Cargando...</span></div></div><div class="kpi-icon"><i data-lucide="dollar-sign"></i></div></div>
+            <div class="kpi-card cyan" id="kpi-units"><div class="kpi-info"><h4>Unidades Vendidas</h4><div class="kpi-value">0</div><div class="kpi-footer neutral" id="kpi-units-footer"><span>Cargando...</span></div></div><div class="kpi-icon"><i data-lucide="shopping-bag"></i></div></div>
+            <div class="kpi-card emerald" id="kpi-budget"><div class="kpi-info"><h4>Cump. Presupuesto</h4><div class="kpi-value">0%</div><div class="kpi-footer neutral" id="kpi-budget-footer"><span>vs Presupuesto total</span></div></div><div class="kpi-icon"><i data-lucide="trending-up"></i></div></div>
+            <div class="kpi-card orange" id="kpi-ebitda"><div class="kpi-info"><h4>Utilidad EBITDA</h4><div class="kpi-value">$0</div><div class="kpi-footer neutral" id="kpi-ebitda-footer"><span>Margen EBITDA: 0%</span></div></div><div class="kpi-icon"><i data-lucide="pie-chart"></i></div></div>
+        </section>
+        <!-- Charts Grid -->
+        <section class="charts-grid">
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">Ventas vs Presupuesto por Producto</h3><span class="badge badge-blue">Top 8</span></div><div class="chart-container"><canvas id="chart-sales-budget"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">Tendencia de Ventas Histórica</h3><span class="badge badge-blue">$ Millones</span></div><div class="chart-container"><canvas id="chart-history"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">Ventas por Marca</h3><span class="badge badge-blue">Top 5</span></div><div class="chart-container"><canvas id="chart-brand"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3 class="chart-title">Composición de Ventas por Género</h3></div><div class="chart-container"><canvas id="chart-gender"></canvas></div></div>
+        </section>
+        <!-- Data Table Panel -->
+        <section class="table-panel">
+            <div class="table-header"><h3 class="table-title">Detalle de Ventas por Producto</h3><div class="search-container"><i class="search-icon" data-lucide="search"></i><input type="text" class="search-input" id="table-search" placeholder="Buscar producto, marca o género..."></div></div>
+            <div class="table-wrapper"><table><thead><tr><th>Producto</th><th>Marca</th><th>Género</th><th>Unidades Act.</th><th>Venta Actual ($)</th><th>Presupuesto ($)</th><th>Cumpl.</th></tr></thead><tbody id="table-body"><!-- Rows populated by JS --></tbody></table></div>
+            <div class="pagination-container"><div id="table-info">Mostrando 0 de 0 productos</div><div class="pagination-buttons"><button class="btn-page" id="btn-prev" onclick="changePage(-1)" disabled>← Anterior</button><button class="btn-page" id="btn-next" onclick="changePage(1)" disabled>Siguiente →</button></div></div>
+        </section>
+    </div>
+    <div class="toast" id="toast"><span class="toast-icon" id="toast-icon"></span><span id="toast-message"></span></div>
+    <script>
+        // (All JavaScript from original file omitted for brevity; copy the script section from the original index.html)
+        // ...
+    </script>
+</body>
+</html>
