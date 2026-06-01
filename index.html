@@ -50,7 +50,12 @@
         .btn-select{background:linear-gradient(135deg,var(--primary),var(--primary-hover));color:white;padding:.65rem 1.5rem;border-radius:10px;font-size:.88rem;font-weight:600;border:none;cursor:pointer;box-shadow:0 4px 15px rgba(79,70,229,0.3);transition:var(--transition);display:flex;align-items:center;gap:.5rem;}
         .btn-select:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(79,70,229,0.4);}
         .btn-select:active{transform:translateY(0);}
-        #file-input{display:none;}
+        #file-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+        }
         .welcome-footer{font-size:.75rem;color:var(--text-muted);display:flex;align-items:center;gap:.4rem;opacity:.7;}
         .loader{border:3px solid rgba(255,255,255,0.08);border-radius:50%;border-top:3px solid var(--secondary);width:26px;height:26px;animation:spin .8s linear infinite;display:none;}
         .dashboard-container{display:none;padding:1.5rem 2rem 2rem;max-width:1600px;margin:0 auto;animation:fadeIn .6s ease;}
@@ -129,7 +134,7 @@
                 <span class="drop-title">Arrastra y suelta tu archivo Excel aquí</span>
                 <p class="drop-sub">Formato compatible: <strong>.xlsx</strong></p>
                 <div class="btn-actions">
-                    <button class="btn-select" type="button" id="btn-browse"><i data-lucide="folder-open" style="width:16px;height:16px;"></i> Examinar Archivo</button>
+                    <label class="btn-select" id="btn-browse" for="file-input"><i data-lucide="folder-open" style="width:16px;height:16px;"></i> Examinar Archivo</label>
                 </div>
                 <input type="file" id="file-input" accept=".xlsx">
             </div>
